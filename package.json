@@ -1,0 +1,17 @@
+{
+  "name": "ingress-api",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "aws-sdk": "^2.1467.0",
+    "mongodb": "^6.1.0",
+    "node-rdkafka": "^2.17.0"
+  }
+}
