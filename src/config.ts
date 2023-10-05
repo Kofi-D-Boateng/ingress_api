@@ -34,4 +34,5 @@ export const config = {
     COLLECTION_NAME: process.env.DEV_MONGO_MESSAGE_COLLECTION,
   },
   KAFKA_GROUP_ID: process.env.KAFKA_GROUP_ID || "",
+  SOURCE_EMAIL: process.env.NO_REPLY_EMAIL,
 };
