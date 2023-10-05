@@ -2,9 +2,10 @@ import kafka from "node-rdkafka";
 import { Topic } from "../enums/topic";
 import { AwsStorage, Message, SavableMessage } from "./storage";
 import { Db, ObjectId } from "mongodb";
+import { NotifierFactory } from "./notifier";
 
 export interface Consumer {
-  run(s3: AwsStorage, mongo: Db): void;
+  run(s3: AwsStorage, mongo: Db, notifierFactory: NotifierFactory): void;
 }
 
 export class BrokerConsumer implements Consumer {
@@ -12,6 +13,11 @@ export class BrokerConsumer implements Consumer {
   private readonly consumer: kafka.KafkaConsumer;
 
   constructor(topics: Topic[], groupId: string, host: string) {
+    if (groupId.trim().length == 0 || host.trim().length == 0) {
+      throw new Error(
+        "Invalid arguments for Broker constructor.... please make sure all items are valid..."
+      );
+    }
     this.consumer = new kafka.KafkaConsumer(
       {
         "group.id": groupId,
@@ -21,12 +27,12 @@ export class BrokerConsumer implements Consumer {
     );
     this.topics = topics;
   }
-  run(s3: AwsStorage, mongoDb: Db): void {
+  run(s3: AwsStorage, mongoDb: Db, notifierFactory: NotifierFactory): void {
     if (!this.consumer.isConnected()) this.connectToCluster();
     this.consumer.on("data", (data) => {
       switch (data.topic) {
         case Topic.CREATE_ROOM.valueOf():
-          const referenceKey = JSON.stringify(data.value);
+          const referenceKey = JSON.parse("");
           console.log("Creating instance in db for:", referenceKey);
           const collection = mongoDb.collection("");
           const doc = {
@@ -37,7 +43,7 @@ export class BrokerConsumer implements Consumer {
           break;
 
         case Topic.DELETE_ROOM.valueOf():
-          const key = JSON.stringify(data.value);
+          const key = JSON.parse("");
           console.log("Deleting instance in db for:", key);
           break;
 
@@ -62,6 +68,35 @@ export class BrokerConsumer implements Consumer {
           };
           const collectionToSaveMessage = mongoDb.collection("");
           collectionToSaveMessage.updateOne({ _id: obj.roomId }, update);
+          break;
+
+        case Topic.SEND_MFA_EMAIL.valueOf():
+          const mfaEmailCode: { code: string; email: string } = JSON.parse("");
+          const mfaEmailer = notifierFactory.getClass(Topic.SEND_MFA_EMAIL);
+          if (mfaEmailer)
+            mfaEmailer.send(mfaEmailCode.code, undefined, mfaEmailCode.email);
+          break;
+
+        case Topic.SEND_MFA_TEXT.valueOf():
+          const mfaTextCode: { code: string; phoneNumber: string } =
+            JSON.parse("");
+          const mfaTexter = notifierFactory.getClass(Topic.SEND_MFA_EMAIL);
+          if (mfaTexter)
+            mfaTexter.send(mfaTextCode.code, mfaTextCode.phoneNumber);
+          break;
+
+        case Topic.SEND_REGISTRATION_EMAIL.valueOf():
+          const registrationCode: { code: string; email: string } =
+            JSON.parse("");
+          const registrationEmailer = notifierFactory.getClass(
+            Topic.SEND_REGISTRATION_EMAIL
+          );
+          if (registrationEmailer)
+            registrationEmailer.send(
+              registrationCode.code,
+              undefined,
+              registrationCode.email
+            );
           break;
 
         default:
