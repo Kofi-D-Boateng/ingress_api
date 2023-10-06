@@ -32,31 +32,119 @@ export class BrokerConsumer implements Consumer {
     this.consumer.on("data", (data) => {
       switch (data.topic) {
         case Topic.CREATE_ROOM.valueOf():
-          const referenceKey = JSON.parse("");
+          const kafkaMessage: string | undefined = data.value?.toString();
+
+          if (!kafkaMessage) {
+            console.warn(
+              "Attempted to read a message for topic: %d, but there was not a message",
+              Topic.CREATE_ROOM
+            );
+            return;
+          }
+          const referenceKey: ObjectId = JSON.parse(kafkaMessage);
+
+          if (!ObjectId.isValid(referenceKey)) {
+            console.error(
+              "The reference key sent with this message is not a valid id... ['%d']",
+              referenceKey
+            );
+            return;
+          }
+
           console.log("Creating instance in db for:", referenceKey);
-          const collection = mongoDb.collection("");
+
+          const collectionToInsertIn = mongoDb.collection("");
           const doc = {
             reference_id: referenceKey,
             messages: [],
           };
-          collection.insertOne(doc);
+          const insertResult = collectionToInsertIn.insertOne(doc);
+          insertResult
+            .then((result) => {
+              if (!result.acknowledged) {
+                console.warn(
+                  "While attempting an insertion, the write was not acknowledged. Key: %d",
+                  referenceKey
+                );
+              }
+            })
+            .catch((err) =>
+              console.error(
+                "Error when trying to complete an insertion into the database: %d\n",
+                err
+              )
+            );
           break;
 
         case Topic.DELETE_ROOM.valueOf():
-          const key = JSON.parse("");
+          const deleteionKey: string | undefined = data.value?.toString();
+
+          if (!deleteionKey) {
+            console.warn(
+              "Attempted to read a message for topic: %d, but there was not a message",
+              Topic.DELETE_ROOM
+            );
+            return;
+          }
+
+          const key: ObjectId = JSON.parse(deleteionKey);
+
           console.log("Deleting instance in db for:", key);
+
+          const collectionToDeleteFrom = mongoDb.collection("");
+
+          const deletionResult = collectionToDeleteFrom.deleteOne({ _id: key });
+          deletionResult
+            .then((result) => {
+              if (!result.acknowledged) {
+                console.warn(
+                  "While attempting a deletion, the write was not acknowledged. Key: %d",
+                  key
+                );
+              }
+            })
+            .catch((err) =>
+              console.error(
+                "Error when trying to complete a deletion from the database: %d\n",
+                err
+              )
+            );
           break;
 
         case Topic.SAVE_MESSAGE.valueOf():
-          const obj: { roomId: ObjectId; message: Message } = JSON.parse("");
+          const messageToBeSave: string | undefined = data.value?.toString();
+
+          if (!messageToBeSave) {
+            console.warn(
+              "Attempted to read a message for topic: %d, but there was not a message",
+              Topic.SAVE_MESSAGE
+            );
+            return;
+          }
+
+          const obj: { roomId: ObjectId; message: Message } =
+            JSON.parse(messageToBeSave);
+          if (
+            !ObjectId.isValid(obj.roomId) ||
+            ObjectId.isValid(obj.message.senderId)
+          ) {
+            console.error(
+              "The roomId or the Message id sent along with this message is not a valid id... ['%d','%d']",
+              obj.roomId,
+              obj.message.senderId
+            );
+            return;
+          }
+
           console.log("Saving message in db for :", obj.roomId);
-          const hash: string[] = s3.upload(
+
+          const hashes: string[] = s3.upload(
             obj.message.photos,
             obj.message.mimeType
           );
           const messageDoc: SavableMessage = {
             senderId: obj.message.senderId,
-            photoKeys: hash,
+            photoKeys: hashes,
             createdAt: obj.message.createdAt,
             sender: obj.message.sender,
             text: obj.message.text,
@@ -67,41 +155,99 @@ export class BrokerConsumer implements Consumer {
             },
           };
           const collectionToSaveMessage = mongoDb.collection("");
-          collectionToSaveMessage.updateOne({ _id: obj.roomId }, update);
+          const r = collectionToSaveMessage.updateOne(
+            { _id: obj.roomId },
+            update
+          );
+          r.then((u) => {
+            if (!u.acknowledged) {
+              console.error("Error saving a message to the database...");
+            }
+          }).catch((err) =>
+            console.error(
+              "Error when trying to complete an update into the database: %d\n",
+              err
+            )
+          );
           break;
 
         case Topic.SEND_MFA_EMAIL.valueOf():
-          const mfaEmailCode: { code: string; email: string } = JSON.parse("");
+          const mfaEmailMessage = data.value?.toString();
+
+          if (!mfaEmailMessage) {
+            console.warn(
+              "Attempted to read a message for topic: %d, but there was not a message",
+              Topic.SEND_MFA_EMAIL
+            );
+            return;
+          }
+
+          const mfaEmailCode: { code: string; email: string } =
+            JSON.parse(mfaEmailMessage);
           const mfaEmailer = notifierFactory.getClass(Topic.SEND_MFA_EMAIL);
-          if (mfaEmailer)
+          if (mfaEmailer) {
             mfaEmailer.send(mfaEmailCode.code, undefined, mfaEmailCode.email);
+          } else {
+            console.warn(
+              "Could not retrieve emailer from notifierFactory.... "
+            );
+          }
           break;
 
         case Topic.SEND_MFA_TEXT.valueOf():
+          const mfaTextMessage = data.value?.toString();
+
+          if (!mfaTextMessage) {
+            console.warn(
+              "Attempted to read a message for topic: %d, but there was not a message",
+              Topic.SEND_MFA_TEXT
+            );
+            return;
+          }
           const mfaTextCode: { code: string; phoneNumber: string } =
-            JSON.parse("");
+            JSON.parse(mfaTextMessage);
           const mfaTexter = notifierFactory.getClass(Topic.SEND_MFA_EMAIL);
-          if (mfaTexter)
+          if (mfaTexter) {
             mfaTexter.send(mfaTextCode.code, mfaTextCode.phoneNumber);
+          } else {
+            console.warn(
+              "Could not retrieve the texter from the notifier factory...."
+            );
+          }
           break;
 
         case Topic.SEND_REGISTRATION_EMAIL.valueOf():
-          const registrationCode: { code: string; email: string } =
-            JSON.parse("");
+          const registrationEmailMessage = data.value?.toString();
+
+          if (!registrationEmailMessage) {
+            console.warn(
+              "Attempted to read a message for topic: %d, but there was not a message",
+              Topic.SEND_REGISTRATION_EMAIL
+            );
+            return;
+          }
+          const registrationCode: { code: string; email: string } = JSON.parse(
+            registrationEmailMessage
+          );
           const registrationEmailer = notifierFactory.getClass(
             Topic.SEND_REGISTRATION_EMAIL
           );
-          if (registrationEmailer)
+          if (registrationEmailer) {
             registrationEmailer.send(
               registrationCode.code,
               undefined,
               registrationCode.email
             );
+          } else {
+            console.warn(
+              "Could not retrieve the emailer from the notifier factory...."
+            );
+          }
           break;
 
         default:
           console.warn(
-            "Data from queue has been read, but topic value was not found:",
+            "Data from queue has been read, but topic value was not found: %d",
             data.topic
           );
       }
