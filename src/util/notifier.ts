@@ -8,6 +8,7 @@ export interface Messenger {
 
 export class Texter implements Messenger {
   private readonly texter: aws.SNS;
+  private readonly phoneNumberRegex: RegExp = /^\+\d{1,15}$/;
   constructor(accessKey: string, secretKey: string, region: string) {
     this.texter = new aws.SNS({
       credentials: { accessKeyId: accessKey, secretAccessKey: secretKey },
@@ -19,6 +20,12 @@ export class Texter implements Messenger {
     phoneNumber?: string | undefined,
     destinationEmail?: string | undefined
   ): void {
+    if (!this.validate(code, phoneNumber as string)) {
+      console.warn(
+        "One or more values was not valid... aborting sending text message"
+      );
+      return;
+    }
     const params = {
       Message: `Thank you for using BunkedUp as your roommate finder, your verification code is ${code}`,
       PhoneNumber: phoneNumber,
@@ -28,11 +35,21 @@ export class Texter implements Messenger {
       else console.log("Sent mfa text for code: %d", code);
     });
   }
+  private validate: (code: string, phoneNumber: string) => boolean = (
+    code,
+    phoneNumber
+  ) => {
+    let result: boolean = false;
+    result = this.phoneNumberRegex.test(phoneNumber);
+    return result;
+  };
 }
 
 export class Mailer implements Messenger {
   private readonly mailer: aws.SES;
   private readonly state: "MFA" | "REGISTRATION";
+  private readonly emailRegex: RegExp =
+    /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
   constructor(
     accessKey: string,
     secretKey: string,
@@ -50,6 +67,13 @@ export class Mailer implements Messenger {
     phoneNumber?: string | undefined,
     destinationEmail?: string | undefined
   ): void {
+    const sourceEmail = config.SOURCE_EMAIL as string;
+    if (!this.validate(code, destinationEmail as string, sourceEmail)) {
+      console.warn(
+        "One or more values was not valid... aborting sending email."
+      );
+      return;
+    }
     const message =
       this.state == "MFA"
         ? `Your MFA code is ${code}`
@@ -73,7 +97,7 @@ export class Mailer implements Messenger {
           Data: subject,
         },
       },
-      Source: config.SOURCE_EMAIL as string,
+      Source: sourceEmail,
     };
 
     this.mailer.sendEmail(params, (err, data) => {
@@ -85,6 +109,18 @@ export class Mailer implements Messenger {
         );
     });
   }
+  private validate: (code: string, ...email: string[]) => boolean = (
+    code,
+    email
+  ) => {
+    let result: boolean = false;
+    if (email.length > 1) {
+      for (const e of email) result = this.emailRegex.test(e);
+    } else {
+      result = this.emailRegex.test(email);
+    }
+    return result;
+  };
 }
 
 export interface NotifierFactory {

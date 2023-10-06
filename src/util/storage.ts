@@ -1,9 +1,10 @@
 import aws from "aws-sdk";
 import crypto from "crypto";
 import { config } from "../config";
+import { ObjectId } from "mongodb";
 
 export type Message = {
-  senderId?: string;
+  senderId: ObjectId;
   sender: string;
   text: string;
   photos: Buffer[];
@@ -12,7 +13,7 @@ export type Message = {
 };
 
 export type SavableMessage = {
-  senderId?: string;
+  senderId: ObjectId;
   sender: string;
   text: string;
   photoKeys: string[];
