@@ -6,11 +6,13 @@ import { NotifierFactory } from "./notifier";
 
 export interface Consumer {
   run(s3: AwsStorage, mongo: Db, notifierFactory: NotifierFactory): void;
+  stop(): void;
 }
 
 export class BrokerConsumer implements Consumer {
   private readonly topics: Topic[];
   private readonly consumer: kafka.KafkaConsumer;
+  public isReady: boolean = true;
 
   constructor(topics: Topic[], groupId: string, host: string) {
     if (groupId.trim().length == 0 || host.trim().length == 0) {
@@ -29,7 +31,15 @@ export class BrokerConsumer implements Consumer {
   }
   run(s3: AwsStorage, mongoDb: Db, notifierFactory: NotifierFactory): void {
     if (!this.consumer.isConnected()) this.connectToCluster();
+    this.isReady = false;
+    this.consumer.on("ready", () => {
+      console.log("Broker is connected and ready....");
+      console.log(`Subscribing to ${this.topics}....`);
+      this.consumer.subscribe(this.topics);
+      this.consumer.consume();
+    });
     this.consumer.on("data", (data) => {
+      console.log("Consuming messages....");
       switch (data.topic) {
         case Topic.CREATE_ROOM.valueOf():
           const kafkaMessage: string | undefined = data.value?.toString();
@@ -93,7 +103,9 @@ export class BrokerConsumer implements Consumer {
 
           const collectionToDeleteFrom = mongoDb.collection("");
 
-          const deletionResult = collectionToDeleteFrom.deleteOne({ _id: key });
+          const deletionResult = collectionToDeleteFrom.deleteOne({
+            _id: key,
+          });
           deletionResult
             .then((result) => {
               if (!result.acknowledged) {
@@ -218,7 +230,6 @@ export class BrokerConsumer implements Consumer {
 
         case Topic.SEND_REGISTRATION_EMAIL.valueOf():
           const registrationEmailMessage = data.value?.toString();
-
           if (!registrationEmailMessage) {
             console.warn(
               "Attempted to read a message for topic: %d, but there was not a message",
@@ -232,6 +243,7 @@ export class BrokerConsumer implements Consumer {
           const registrationEmailer = notifierFactory.getClass(
             Topic.SEND_REGISTRATION_EMAIL
           );
+
           if (registrationEmailer) {
             registrationEmailer.send(
               registrationCode.code,
@@ -251,17 +263,15 @@ export class BrokerConsumer implements Consumer {
             data.topic
           );
       }
+      this.isReady = true;
     });
+  }
+
+  stop(): void {
+    this.consumer.disconnect();
   }
 
   private connectToCluster: () => void = () => {
     this.consumer.connect();
-    this.consumer.on("ready", () => {
-      console.log("Broker is connected and ready....");
-      console.log(`Subscribing to ${this.topics}....`);
-      this.consumer.subscribe(this.topics);
-      console.log("Consuming messages....");
-      this.consumer.consume();
-    });
   };
 }

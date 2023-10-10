@@ -1,7 +1,8 @@
+import "dotenv/config";
 import { Db } from "mongodb";
 import { Topic } from "./enums/topic";
 import { DatabaseSingleton } from "./util/databaseSingleton";
-import { BrokerConsumer, Consumer } from "./util/kafkaConsumer";
+import { BrokerConsumer } from "./util/kafkaConsumer";
 import { AwsStorage } from "./util/storage";
 import { config } from "./config";
 import { NotificationFactory } from "./util/notifier";
@@ -16,7 +17,7 @@ const topics: Topic[] = [
 ];
 
 const awsParams = process.env.ENV == "prod" ? config.PROD_AWS : config.DEV_AWS;
-const consumer: Consumer = new BrokerConsumer(
+const consumer: BrokerConsumer = new BrokerConsumer(
   topics,
   config.KAFKA_GROUP_ID,
   config.HOST
@@ -34,6 +35,10 @@ const factory = new NotificationFactory(
   awsParams.REGION || ""
 );
 setInterval(async () => {
-  const db: Db = await DatabaseSingleton.getDbInstance();
-  consumer.run(s3, db, factory);
-}, 5000);
+  if (consumer.isReady) {
+    const db: Db = await DatabaseSingleton.getDbInstance();
+    consumer.run(s3, db, factory);
+  }
+}, 10000);
+
+process.on("SIGINT", () => consumer.stop());
