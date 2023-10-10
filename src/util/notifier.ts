@@ -25,6 +25,8 @@ export class Texter implements Messenger {
         "One or more values was not valid... aborting sending text message"
       );
       return;
+    } else {
+      console.log("Sending text message for MFA....");
     }
     const params = {
       Message: `Thank you for using BunkedUp as your roommate finder, your verification code is ${code}`,
@@ -73,6 +75,8 @@ export class Mailer implements Messenger {
         "One or more values was not valid... aborting sending email."
       );
       return;
+    } else {
+      console.log(`Sending email from emailer in state:${this.state}`);
     }
     const message =
       this.state == "MFA"
@@ -149,19 +153,18 @@ export class NotificationFactory implements NotifierFactory {
     topic: Topic,
     state?: "MFA" | "REGISTRATION"
   ): Messenger | undefined {
-    switch (topic) {
-      case Topic.SEND_MFA_EMAIL || Topic.SEND_REGISTRATION_EMAIL:
-        return new Mailer(
-          this.accessKey,
-          this.secretKey,
-          this.region,
-          state ? state : "MFA"
-        );
-      case Topic.SEND_MFA_TEXT:
-        return new Texter(this.accessKey, this.secretKey, this.region);
-      default:
-        console.warn("Class could not be created based on topic: %d", topic);
-        return undefined;
+    if (Topic.SEND_MFA_EMAIL || Topic.SEND_REGISTRATION_EMAIL) {
+      return new Mailer(
+        this.accessKey,
+        this.secretKey,
+        this.region,
+        state ? state : "MFA"
+      );
+    } else if (Topic.SEND_MFA_TEXT) {
+      return new Texter(this.accessKey, this.secretKey, this.region);
+    } else {
+      console.warn(`Class could not be created based on topic:${topic}`);
+      return undefined;
     }
   }
 }
