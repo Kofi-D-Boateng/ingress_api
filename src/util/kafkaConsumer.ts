@@ -12,9 +12,15 @@ export interface Consumer {
 export class BrokerConsumer implements Consumer {
   private readonly topics: Topic[];
   private readonly consumer: kafka.KafkaConsumer;
+  private readonly encryption: string;
   public isReady: boolean = true;
 
-  constructor(topics: Topic[], groupId: string, host: string) {
+  constructor(
+    topics: Topic[],
+    groupId: string,
+    host: string,
+    encryption: string
+  ) {
     if (groupId.trim().length == 0 || host.trim().length == 0) {
       throw new Error(
         "Invalid arguments for Broker constructor.... please make sure all items are valid..."
@@ -28,6 +34,7 @@ export class BrokerConsumer implements Consumer {
       {}
     );
     this.topics = topics;
+    this.encryption = encryption;
   }
   run(s3: AwsStorage, mongoDb: Db, notifierFactory: NotifierFactory): void {
     if (!this.consumer.isConnected()) this.connectToCluster();
@@ -152,7 +159,8 @@ export class BrokerConsumer implements Consumer {
 
           const hashes: string[] = s3.upload(
             obj.message.photos,
-            obj.message.mimeType
+            obj.message.mimeType,
+            this.encryption
           );
           const messageDoc: SavableMessage = {
             senderId: obj.message.senderId,

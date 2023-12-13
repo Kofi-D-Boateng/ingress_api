@@ -21,7 +21,7 @@ export type SavableMessage = {
 };
 
 export interface Storage {
-  upload(message: Buffer[], mimeType: string): string[];
+  upload(message: Buffer[], mimeType: string, encryption: string): string[];
   delete(key: string): void;
   generateSignedUrl(key: string): string;
 }
@@ -57,7 +57,11 @@ export class AwsStorage implements Storage {
     this.bucket = bucket;
     this.expiration = expiration;
   }
-  upload(photoBufferArray: Buffer[], mimeType: string): string[] {
+  upload(
+    photoBufferArray: Buffer[],
+    mimeType: string,
+    encryption: string = ""
+  ): string[] {
     const hashKeys: string[] = [];
     for (const photoBuffer of photoBufferArray) {
       const hashKey = crypto.randomBytes(config.HASH_SALT).toString("hex");
@@ -66,6 +70,7 @@ export class AwsStorage implements Storage {
         ContentType: mimeType,
         Key: hashKey,
         Body: photoBuffer,
+        ServerSideEncryption: encryption,
       };
       const managedUpload = this.s3.upload(params);
       managedUpload.send((err, data) => {
