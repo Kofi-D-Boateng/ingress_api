@@ -10,6 +10,7 @@ export const config = {
       EXPIRATION: process.env.PROD_PRESIGNED_EXPIRATION
         ? parseInt(process.env.PROD_PRESIGNED_EXPIRATION)
         : 0,
+      ENCRYPTION: process.env.S3_ENCRYPTION,
     },
   },
   DEV_AWS: {
@@ -21,6 +22,7 @@ export const config = {
       EXPIRATION: process.env.DEV_PRESIGNED_EXPIRATION
         ? parseInt(process.env.DEV_PRESIGNED_EXPIRATION)
         : 0,
+      ENCRYPTION: process.env.S3_ENCRYPTION,
     },
   },
   PROD_MONGO: {
